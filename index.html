@@ -1,0 +1,689 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+<title>Ghost Run</title>
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+<style>
+body{background:#222;font-family:'Press Start 2P',monospace;margin:0}
+#brand{color:#9e95a8;font-size:10px;text-align:center;padding:6px}
+.topUI{position:absolute;z-index:1000;transform:translate(-50%,25px);text-shadow:-2px 0 black,0 2px black,2px 0 black,0 -2px black;letter-spacing:2px;color:#fff;font-size:17px}
+.topUI::before{display:inline-block;height:17px;padding:1px 2px;line-height:19px;font-size:17px;background:#fff;text-shadow:none;font-weight:900;letter-spacing:0;border-radius:6px;margin-right:30px;border:2px solid #7dd8c9}
+#time{left:13%;color:#f4f430}#time::before{content:'TIME';color:#f57214}
+#score{left:45%}#score::before{content:'SCORE';color:#a61a9d}
+#lap{left:88%;width:45%}#lap::before{content:'LAP';color:#0082df}
+#tacho{position:absolute;text-align:right;width:23%;bottom:5%;z-index:2000;color:#e62e13;text-shadow:-2px 0 black,0 2px black,2px 0 black,0 -2px black;letter-spacing:2px;font-size:23px}
+#tacho::after{content:'km/h';color:#fab453;font-size:18px;margin-left:5px}
+#rank{position:absolute;left:12px;top:70px;z-index:2000;color:#fff;font-size:10px;line-height:16px;text-shadow:-1px 0 #000,0 1px #000,1px 0 #000,0 -1px #000}
+#wrap{margin:0 auto;overflow:hidden}
+#game{position:relative;overflow:hidden;background:#222;user-select:none;transform-origin:0 0}
+#road{position:absolute;width:100%;height:100%;transition:opacity 2s;transition-timing-function:steps(8,end)}
+#road *{position:absolute;image-rendering:pixelated}
+#hero{background-repeat:no-repeat;background-position:-110px 0;z-index:2000;transform:scale(1.4)}
+#cloud{background-size:auto 100%;width:100%;height:57%}
+#home{position:absolute;color:#fff;width:100%;height:100%;z-index:1000}
+#highscore{position:absolute;width:100%;height:20%;bottom:0;column-count:3;column-fill:auto}
+#highscore *{color:#9e95a8;margin:0 0 6px 27px}
+h1{position:absolute;left:50%;top:25%;transform:translate(-50%,-50%);font-size:5em;margin:0;background:-webkit-linear-gradient(#25d8b1,#e2bbf0);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+#text{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);font-size:3em;color:#d9bbf3;text-shadow:0 2px black,2px 0 black;z-index:3500}
+#ui{position:absolute;inset:0;z-index:3000;pointer-events:none}
+.panel{position:absolute;left:50%;top:170px;transform:translateX(-50%);display:none;flex-direction:column;gap:8px;padding:16px;min-width:270px;background:rgba(0,0,0,.82);border:2px solid #7dd8c9;border-radius:8px;color:#fff;font-size:11px;text-align:center;pointer-events:auto}
+.panel button,.panel input{font:inherit;padding:10px;background:#a61a9d;color:#fff;border:2px solid #fff;border-radius:6px;text-align:center}
+.panel input{background:#111;text-transform:uppercase;width:90px}
+.panel small{color:#f4f430;min-height:12px}
+.panel h3{margin:0;color:#25d8b1;font-size:13px}
+.row{display:flex;gap:6px;justify-content:center}
+#controls{color:#868686;font-size:11px;margin:6px;text-align:center}
+#controls>span{margin:0 10px}
+#pad{display:flex;gap:6px;padding:8px;max-width:800px;margin:0 auto;touch-action:none}
+#pad button{flex:1;height:64px;font:inherit;font-size:12px;background:#333;color:#ccc;border:2px solid #868686;border-radius:10px;touch-action:none;user-select:none}
+</style>
+</head>
+<body>
+<div id="brand">SUGAM CREATIONS</div>
+<div id="wrap">
+<div id="game">
+ <div id="road"><div id="cloud"></div><div id="hero"></div></div>
+ <div id="hud"><span id="time" class="topUI">0</span><span id="score" class="topUI">0</span><span id="lap" class="topUI">0'00"000</span><span id="tacho">0</span><div id="rank"></div></div>
+ <div id="home"><h1>OutRun</h1><p id="text"></p><div id="highscore"></div></div>
+ <div id="ui">
+  <div id="pLogin" class="panel"><h3>GHOST RUN</h3><button id="bG">GOOGLE LOGIN</button><button id="bGuest">PLAY AS GUEST</button><small id="err"></small></div>
+  <div id="pMenu" class="panel"><b id="who"></b><button id="bSolo">SOLO + GHOST</button><button id="bCreate">CREATE ROOM</button><div class="row"><input id="codeIn" maxlength="4" placeholder="CODE"><button id="bJoin">JOIN</button></div><button id="bOut">LOGOUT</button><small id="msg"></small></div>
+  <div id="pLobby" class="panel"><h3 id="rcode"></h3><div id="plist"></div><button id="bStart">START</button><button id="bLeave">LEAVE</button></div>
+ </div>
+</div>
+</div>
+<div id="controls"><span>M mute</span><span>&lt; &gt; steer</span><span>UP gas / DOWN brake</span><span>ESC leave</span></div>
+<div id="pad"><button data-k="ArrowLeft">&lt;</button><button data-k="ArrowRight">&gt;</button><button data-k="ArrowDown">BRAKE</button><button data-k="ArrowUp">GAS</button></div>
+
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+<script>
+const firebaseConfig = {
+  apiKey: "AIzaSyD-8CtwkAQ8TEjfnkV8WPN-FAPYYEebXKo",
+  authDomain: "ghostrun-ef0ed.firebaseapp.com",
+  databaseURL: "https://ghostrun-ef0ed-default-rtdb.firebaseio.com",
+  projectId: "ghostrun-ef0ed",
+  storageBucket: "ghostrun-ef0ed.firebasestorage.app",
+  messagingSenderId: "980798001219",
+  appId: "1:980798001219:web:d09da8670c0f476db804f6",
+  measurementId: "G-NMVHD28FS1"
+};
+firebase.initializeApp(firebaseConfig);
+const auth=firebase.auth(), db=firebase.database();
+
+const ASSETS={
+COLOR:{TAR:['#959298','#9c9a9d'],RUMBLE:['#959298','#f5f2f6'],GRASS:['#eedccd','#e6d4c5']},
+IMAGE:{
+TREE:{src:'https://s3-us-west-2.amazonaws.com/s.cdpn.io/155629/tree.png',width:132,height:192},
+HERO:{src:'https://s3-us-west-2.amazonaws.com/s.cdpn.io/155629/hero.png',width:110,height:56},
+CAR:{src:'https://s3-us-west-2.amazonaws.com/s.cdpn.io/155629/car04.png',width:50,height:36},
+FINISH:{src:'https://s3-us-west-2.amazonaws.com/s.cdpn.io/155629/finish.png',width:339,height:180,offset:-.5},
+SKY:{src:'https://s3-us-west-2.amazonaws.com/s.cdpn.io/155629/cloud.jpg'}
+},
+AUDIO:{
+theme:'https://s3-us-west-2.amazonaws.com/s.cdpn.io/155629/theme.mp3',
+engine:'https://s3-us-west-2.amazonaws.com/s.cdpn.io/155629/engine.wav',
+honk:'https://s3-us-west-2.amazonaws.com/s.cdpn.io/155629/honk.wav',
+beep:'https://s3-us-west-2.amazonaws.com/s.cdpn.io/155629/beep.wav'
+}
+};
+
+Number.prototype.pad=function(numZeros,char=0){
+let n=Math.abs(this);
+let zeros=Math.max(0,numZeros-Math.floor(n).toString().length);
+let zeroString=Math.pow(10,zeros).toString().substr(1).replace(0,char);
+return zeroString+n;
+};
+Number.prototype.clamp=function(min,max){return Math.max(min,Math.min(this,max))};
+
+const timestamp=_=>new Date().getTime();
+const accelerate=(v,a,dt)=>v+(a*dt);
+const isCollide=(x1,w1,x2,w2)=>(x1-x2)**2<=(w2+w1)**2;
+const $=id=>document.getElementById(id);
+const cl=s=>String(s||'?').replace(/[^\w ]/g,'').slice(0,10);
+const fmt=ms=>`${(ms/60000)|0}'${((ms/1000)%60|0).pad(2)}"${(ms%1000|0).pad(3)}`;
+
+let rnd=Math.random;
+const mul=a=>()=>{a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296};
+function getRand(min,max){return rnd()*(max-min)+min|0}
+function randomProperty(obj){let keys=Object.keys(obj);return obj[keys[keys.length*Math.random()<<0]]}
+
+function drawQuad(element,layer,color,x1,y1,w1,x2,y2,w2){
+element.style.zIndex=layer;
+element.style.background=color;
+element.style.top=y2+'px';
+element.style.left=x1-w1/2-w1+'px';
+element.style.width=w1*3+'px';
+element.style.height=y1-y2+'px';
+let leftOffset=w1+x2-x1+Math.abs(w2/2-w1/2);
+element.style.clipPath=`polygon(${leftOffset}px 0, ${leftOffset+w2}px 0, 66.66% 100%, 33.33% 100%)`;
+}
+
+const KEYS={};
+const keyUpdate=e=>{
+if(e.target.tagName==='INPUT')return;
+KEYS[e.code]=e.type==='keydown';
+if(e.code.startsWith('Arrow'))e.preventDefault();
+};
+addEventListener('keydown',keyUpdate);
+addEventListener('keyup',keyUpdate);
+document.querySelectorAll('#pad button').forEach(b=>{
+const k=b.dataset.k,s=v=>e=>{e.preventDefault();KEYS[k]=v};
+b.onpointerdown=s(true);
+b.onpointerup=b.onpointercancel=b.onpointerleave=s(false);
+});
+
+class Line{
+constructor(){this.x=0;this.y=0;this.z=0;this.X=0;this.Y=0;this.W=0;this.curve=0;this.scale=0;this.elements=[];this.special=null}
+project(camX,camY,camZ){
+this.scale=camD/(this.z-camZ);
+this.X=(1+this.scale*(this.x-camX))*halfWidth;
+this.Y=Math.ceil((1-this.scale*(this.y-camY))*height/2);
+this.W=this.scale*roadW*halfWidth;
+}
+clearSprites(){for(let e of this.elements)e.style.background='transparent'}
+drawSprite(depth,layer,sprite,offset){
+let destX=this.X+this.scale*halfWidth*offset;
+let destY=this.Y+4;
+let destW=sprite.width*this.W/265;
+let destH=sprite.height*this.W/265;
+destX+=destW*offset;
+destY+=destH*-1;
+let obj=(layer instanceof Element)?layer:this.elements[layer+6];
+obj.style.background=`url('${sprite.src}') no-repeat`;
+obj.style.backgroundSize=`${destW}px ${destH}px`;
+obj.style.left=destX+'px';
+obj.style.top=destY+'px';
+obj.style.width=destW+'px';
+obj.style.height=destH+'px';
+obj.style.zIndex=depth;
+}
+}
+
+class Car{
+constructor(pos,type,lane){
+this.pos=pos;this.type=type;this.lane=lane;
+var element=document.createElement('div');
+road.appendChild(element);
+this.element=element;
+}
+}
+
+class Audio{
+constructor(){
+this.audioCtx=new AudioContext();
+this.destination=this.audioCtx.createGain();
+this.volume=1;
+this.destination.connect(this.audioCtx.destination);
+this.files={};
+let _self=this;
+this.load(ASSETS.AUDIO.theme,'theme',function(key){
+let source=_self.audioCtx.createBufferSource();
+source.buffer=_self.files[key];
+let gainNode=_self.audioCtx.createGain();
+gainNode.gain.value=.6;
+source.connect(gainNode);
+gainNode.connect(_self.destination);
+source.loop=true;
+source.start(0);
+});
+}
+get volume(){return this.destination.gain.value}
+set volume(level){this.destination.gain.value=level}
+play(key,pitch){
+if(this.files[key]){
+let source=this.audioCtx.createBufferSource();
+source.buffer=this.files[key];
+source.connect(this.destination);
+if(pitch)source.detune.value=pitch;
+source.start(0);
+}
+}
+load(src,key,callback){
+let _self=this;
+let request=new XMLHttpRequest();
+request.open('GET',src,true);
+request.responseType='arraybuffer';
+request.onload=function(){
+_self.audioCtx.decodeAudioData(request.response,function(buffer){
+_self.files[key]=buffer;
+callback(key);
+},function(){});
+};
+request.send();
+}
+}
+
+const highscores=[];
+const width=800,halfWidth=width/2,height=500,roadW=4000,segL=200,camD=.2,H=1500,N=70;
+const maxSpeed=200,accel=38,breaking=-80,decel=-40,maxOffSpeed=40,offDecel=-70,enemy_speed=8,hitSpeed=20;
+const LANE={A:-2.3,B:-.5,C:1.2};
+const mapLength=15000;
+const SOLO_SEED=7;
+
+let then=timestamp();
+const targetFrameRate=1000/25;
+let audio;
+let inGame,start,playerX,speed,scoreVal,pos,cloudOffset,sectionProg,mapIndex,countDown;
+let lines=[],cars=[];
+
+// online state
+let uid,myName,room,rm,roomRef,busy=false,run=0,lastStart=0,off=0,rec=[],lastSend=0,stepAvg=.05,mineG,wrG;
+const racers={};
+const now=()=>Date.now()+off;
+db.ref('.info/serverTimeOffset').on('value',s=>off=s.val()||0);
+
+function genMap(seed){
+rnd=mul(seed);
+let map=[];
+for(var i=0;i<mapLength;i+=getRand(0,50)){
+let section={from:i,to:(i=i+getRand(300,600))};
+let randHeight=getRand(-5,5);
+let randCurve=getRand(5,30)*(rnd()>=.5?1:-1);
+let randInterval=getRand(20,40);
+if(rnd()>.9)Object.assign(section,{curve:_=>randCurve,height:_=>randHeight});
+else if(rnd()>.8)Object.assign(section,{curve:_=>0,height:i=>Math.sin(i/randInterval)*1000});
+else if(rnd()>.8)Object.assign(section,{curve:_=>0,height:_=>randHeight});
+else Object.assign(section,{curve:_=>randCurve,height:_=>0});
+map.push(section);
+}
+map.push({from:i,to:i+N,curve:_=>0,height:_=>0,special:ASSETS.IMAGE.FINISH});
+map.push({from:Infinity});
+rnd=Math.random;
+return map;
+}
+let map=genMap(SOLO_SEED);
+
+addEventListener('keyup',function(e){
+if(e.target.tagName==='INPUT')return;
+if(e.code==='KeyM'){audio.volume=audio.volume===0?1:0}
+if(e.code==='Escape'&&busy){
+run++;busy=false;reset();
+if(room){roomRef.child('players/'+uid).update({f:-1});renderLobby()}else show('pMenu');
+}
+});
+
+function update(step){
+pos+=speed;
+while(pos>=N*segL)pos-=N*segL;
+while(pos<0)pos+=N*segL;
+
+var startPos=(pos/segL)|0;
+let endPos=(startPos+N-1)%N;
+
+scoreVal+=speed*step;
+countDown-=step;
+
+playerX-=lines[startPos].curve/5000*step*speed;
+
+if(KEYS.ArrowRight)hero.style.backgroundPosition='-220px 0',playerX+=.007*step*speed;
+else if(KEYS.ArrowLeft)hero.style.backgroundPosition='0 0',playerX-=.007*step*speed;
+else hero.style.backgroundPosition='-110px 0';
+
+playerX=playerX.clamp(-3,3);
+
+if(inGame&&KEYS.ArrowUp)speed=accelerate(speed,accel,step);
+else if(KEYS.ArrowDown)speed=accelerate(speed,breaking,step);
+else speed=accelerate(speed,decel,step);
+
+if(Math.abs(playerX)>.55&&speed>=maxOffSpeed)speed=accelerate(speed,offDecel,step);
+speed=speed.clamp(0,maxSpeed);
+
+let current=map[mapIndex];
+let use=current.from<scoreVal&&current.to>scoreVal;
+if(use)sectionProg+=speed*step;
+
+lines[endPos].curve=use?current.curve(sectionProg):0;
+lines[endPos].y=use?current.height(sectionProg):0;
+lines[endPos].special=null;
+
+if(current.to<=scoreVal){
+mapIndex++;
+sectionProg=0;
+lines[endPos].special=map[mapIndex].special;
+}
+
+if(!inGame){
+speed=accelerate(speed,breaking,step);
+speed=speed.clamp(0,maxSpeed);
+}else if(countDown<=0||lines[startPos].special){
+endRace(countDown>0);
+}else{
+time.innerText=(countDown|0).pad(3);
+score.innerText=(scoreVal|0).pad(8);
+tacho.innerText=speed|0;
+let cT=new Date(timestamp()-start);
+lap.innerText=`${cT.getMinutes()}'${cT.getSeconds().pad(2)}"${cT.getMilliseconds().pad(3)}`;
+// record ghost (5 samples / sec)
+const idx=((timestamp()-start)/200)|0;
+while(rec.length/2<=idx)rec.push(+scoreVal.toFixed(1),+playerX.toFixed(2));
+// send position to room
+if(room&&timestamp()-lastSend>150){
+lastSend=timestamp();
+roomRef.child('players/'+uid).update({d:+scoreVal.toFixed(1),x:+playerX.toFixed(2),s:speed|0});
+}
+}
+
+if(speed>0)audio.play('engine',speed*4);
+
+cloud.style.backgroundPosition=`${(cloudOffset-=lines[startPos].curve*step*speed*.13)|0}px 0`;
+
+for(let car of cars){
+car.pos=(car.pos+enemy_speed*step)%N;
+if((car.pos|0)===endPos){
+if(speed<30)car.pos=startPos;
+else car.pos=endPos-2;
+car.lane=randomProperty(LANE);
+}
+const offsetRatio=5;
+if((car.pos|0)===startPos&&isCollide(playerX*offsetRatio+LANE.B,.5,car.lane,.5)){
+speed=Math.min(hitSpeed,speed);
+if(inGame)audio.play('honk');
+}
+}
+
+// ghosts + other players
+stepAvg+=(step-stepAvg)*.1;
+const spu=1/(segL*stepAvg);
+const el=(timestamp()-start)/200;
+const list=Object.values(racers);
+for(const r of list){
+r.el.style.background='transparent';
+if(r.rec){
+const L=r.rec.length/2;
+if(L<2){r.vis=false;continue}
+const i=Math.max(0,Math.min(el|0,L-2)),t=Math.min(1,Math.max(0,el-i));
+r.d=r.rec[2*i]+(r.rec[2*i+2]-r.rec[2*i])*t;
+r.x=r.rec[2*i+1]+(r.rec[2*i+3]-r.rec[2*i+1])*t;
+}else{
+r.d+=r.s*step;
+r.d+=(r.td-r.d)*.15;
+}
+r.n=startPos+Math.round((r.d-scoreVal)*spu);
+r.vis=inGame&&r.n>startPos&&r.n<startPos+N-1;
+}
+if(room&&inGame){
+const a=[[myName,scoreVal]];
+for(const r of list)if(!r.rec)a.push([r.name,r.d]);
+a.sort((p,q)=>q[1]-p[1]);
+rank.innerHTML=a.map((p,i)=>`${i+1}. ${p[0]}`).join('<br>');
+}else rank.innerHTML='';
+
+let maxy=height;
+let camH=H+lines[startPos].y;
+let x=0,dx=0;
+
+for(let n=startPos;n<startPos+N;n++){
+let l=lines[n%N];
+let level=N*2-n;
+
+l.project(playerX*roadW-x,camH,startPos*segL-(n>=N?N*segL:0));
+x+=dx;
+dx+=l.curve;
+l.clearSprites();
+
+if(n%10===0)l.drawSprite(level,0,ASSETS.IMAGE.TREE,-2);
+if((n+5)%10===0)l.drawSprite(level,0,ASSETS.IMAGE.TREE,1.3);
+if(l.special)l.drawSprite(level,0,l.special,l.special.offset||0);
+
+for(let car of cars)
+if((car.pos|0)===n%N)l.drawSprite(level,car.element,car.type,car.lane);
+
+for(const r of list)
+if(r.vis&&r.n===n)l.drawSprite(level,r.el,ASSETS.IMAGE.CAR,r.x*5+LANE.B);
+
+if(l.Y>=maxy)continue;
+maxy=l.Y;
+
+let even=((n/2)|0)%2;
+let grass=ASSETS.COLOR.GRASS[even*1];
+let rumble=ASSETS.COLOR.RUMBLE[even*1];
+let tar=ASSETS.COLOR.TAR[even*1];
+let p=lines[(n-1)%N];
+
+drawQuad(l.elements[0],level,grass,width/4,p.Y,halfWidth+2,width/4,l.Y,halfWidth);
+drawQuad(l.elements[1],level,grass,width/4*3,p.Y,halfWidth+2,width/4*3,l.Y,halfWidth);
+drawQuad(l.elements[2],level,rumble,p.X,p.Y,p.W*1.15,l.X,l.Y,l.W*1.15);
+drawQuad(l.elements[3],level,tar,p.X,p.Y,p.W,l.X,l.Y,l.W);
+
+if(!even){
+drawQuad(l.elements[4],level,ASSETS.COLOR.RUMBLE[1],p.X,p.Y,p.W*.4,l.X,l.Y,l.W*.4);
+drawQuad(l.elements[5],level,tar,p.X,p.Y,p.W*.35,l.X,l.Y,l.W*.35);
+}
+}
+}
+
+function reset(){
+inGame=false;
+start=timestamp();
+countDown=map[map.length-2].to/130+10;
+playerX=0;speed=0;scoreVal=0;pos=0;cloudOffset=0;sectionProg=0;mapIndex=0;
+for(let line of lines)line.curve=line.y=0;
+text.innerText='';
+road.style.opacity=.4;
+hud.style.display='none';
+home.style.display='block';
+tacho.style.display='block';
+}
+
+function updateHighscore(){
+let hN=Math.min(12,highscores.length);
+for(let i=0;i<hN;i++)highscore.children[i].innerHTML=`${(i+1).pad(2,' ')}. ${highscores[i]}`;
+}
+
+/* ---------- race flow ---------- */
+function mk(id,name,ghost){
+const el=document.createElement('div');
+road.appendChild(el);
+if(ghost){el.style.opacity=.55;el.style.filter=ghost===2?'sepia(1) saturate(5)':'grayscale(1) brightness(1.4)'}
+else el.style.filter=`hue-rotate(${(Object.keys(racers).length*80)+60}deg)`;
+return racers[id]={el,name,d:0,td:0,x:0,s:0};
+}
+
+function begin(seed,at,multi){
+const my=++run;
+busy=true;show(null);
+map=genMap(seed);
+for(const id in racers){
+const r=racers[id];
+if(r.rec||!multi){r.el.remove();delete racers[id]}else{r.d=r.td=0}
+}
+if(!multi){
+[[mineG,1,'g:me'],[wrG,2,'g:wr']].forEach(([g,k,id])=>{
+if(!g||(k===2&&g.u===uid))return;
+try{const r=mk(id,g.n,k);r.rec=JSON.parse(g.d)}catch(e){}
+});
+}
+reset();
+(function tick(){
+if(my!==run)return;
+const r=at-now();
+if(r>0){
+text.classList.remove('blink');
+const c=Math.ceil(r/1000);
+if(text.innerText!=c){text.innerText=c;audio.play('beep')}
+setTimeout(tick,50);
+}else go(my,at);
+})();
+}
+
+function go(my,at){
+if(my!==run)return;
+reset();
+home.style.display='none';
+road.style.opacity=1;
+hero.style.display='block';
+hud.style.display='block';
+audio.play('beep',500);
+rec=[];
+start=timestamp()-(now()-at);
+inGame=true;
+}
+
+function endRace(fin){
+const ms=timestamp()-start;
+inGame=false;busy=false;
+tacho.style.display='none';
+home.style.display='block';
+road.style.opacity=.4;
+if(fin){highscores.push(lap.innerText);highscores.sort();updateHighscore()}
+if(room){
+roomRef.child('players/'+uid).update({f:fin?ms:-1,d:+scoreVal.toFixed(1)});
+if(fin)roomRef.child('win').transaction(w=>w||uid).then(r=>{
+if(r.snapshot.val()===uid)db.ref('users/'+uid+'/wins').transaction(n=>(n||0)+1);
+});
+renderLobby();
+}else{
+msg.innerText=fin?'FINISH '+fmt(ms):'TIME UP';
+if(fin)saveGhost(ms);
+show('pMenu');
+}
+}
+
+function saveGhost(ms){
+const o={t:ms,n:myName,u:uid,d:JSON.stringify(rec)};
+const better=c=>(!c||c.t>ms)?o:undefined;
+db.ref('ghosts/'+uid).transaction(better).then(r=>{if(r.committed){mineG=o;msg.innerText+=' NEW BEST'}});
+db.ref('ghosts/_best').transaction(better).then(r=>{if(r.committed){wrG=o;msg.innerText+=' WORLD RECORD'}});
+}
+function loadGhosts(){
+db.ref('ghosts/'+uid).once('value').then(s=>mineG=s.val());
+db.ref('ghosts/_best').once('value').then(s=>wrG=s.val());
+}
+
+/* ---------- UI / rooms ---------- */
+const P=['pLogin','pMenu','pLobby'];
+function show(id){P.forEach(p=>$(p).style.display=p===id?'flex':'none')}
+const aud=()=>{try{audio.audioCtx.resume()}catch(e){}};
+const LET='ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+
+function renderLobby(){
+if(!rm||busy)return;
+show('pLobby');
+rcode.innerText='ROOM '+room;
+const ps=Object.entries(rm.players||{});
+ps.sort((a,b)=>(a[1].f>0?a[1].f:9e9)-(b[1].f>0?b[1].f:9e9));
+plist.innerHTML=ps.map(([id,p])=>`<div>${cl(p.name)}${id===rm.host?' *':''} ${p.f>0?fmt(p.f):p.f===-1?'DNF':rm.state==='racing'&&p.d>0?'RACING':''}</div>`).join('');
+bStart.style.display=rm.host===uid?'block':'none';
+bStart.innerText=rm.state==='racing'?'RACE AGAIN':'START';
+}
+
+function onRoom(s){
+const r=s.val();
+if(!r){leave('ROOM CLOSED');return}
+rm=r;
+const ps=r.players||{};
+for(const id in ps){
+if(id===uid)continue;
+const p=ps[id];
+const c=racers[id]||mk(id,cl(p.name));
+c.td=p.d||0;c.x=p.x||0;c.s=p.s||0;
+}
+for(const id in racers)if(!racers[id].rec&&!ps[id]){racers[id].el.remove();delete racers[id]}
+if(r.state==='racing'&&r.startAt&&r.startAt!==lastStart){lastStart=r.startAt;begin(r.seed,r.startAt,1)}
+renderLobby();
+}
+
+function join0(c,host,at){
+room=c;roomRef=db.ref('rooms/'+c);lastStart=at||0;
+const pr=roomRef.child('players/'+uid);
+if(!host)pr.set({name:myName,d:0});
+(host?roomRef:pr).onDisconnect().remove();
+roomRef.on('value',onRoom);
+}
+
+function leave(m){
+if(roomRef){
+roomRef.off();
+const host=rm&&rm.host===uid;
+const t=host?roomRef:roomRef.child('players/'+uid);
+t.onDisconnect().cancel();t.remove();
+}
+for(const id in racers){racers[id].el.remove();delete racers[id]}
+room=roomRef=rm=null;busy=false;run++;
+reset();
+msg.innerText=m||'';
+show('pMenu');
+}
+
+bG.onclick=()=>{
+aud();err.innerText='';
+const pv=new firebase.auth.GoogleAuthProvider();
+auth.signInWithPopup(pv).catch(e=>{
+if(e.code==='auth/popup-blocked'||e.code==='auth/operation-not-supported-in-this-environment')auth.signInWithRedirect(pv);
+else err.innerText=e.code;
+});
+};
+bGuest.onclick=()=>{aud();err.innerText='';auth.signInAnonymously().catch(e=>err.innerText=e.code)};
+bOut.onclick=()=>auth.signOut();
+bSolo.onclick=()=>{aud();msg.innerText='';room=null;begin(SOLO_SEED,now()+3500,0)};
+bCreate.onclick=async()=>{
+aud();msg.innerText='';
+let c;
+do{c=Array.from({length:4},()=>LET[Math.random()*LET.length|0]).join('')}while((await db.ref('rooms/'+c).once('value')).exists());
+await db.ref('rooms/'+c).set({host:uid,state:'lobby',seed:Math.random()*1e9|0,players:{[uid]:{name:myName,d:0}}});
+join0(c,true);
+};
+bJoin.onclick=async()=>{
+aud();
+const c=codeIn.value.toUpperCase().trim();
+if(c.length<4)return msg.innerText='ENTER CODE';
+const r=(await db.ref('rooms/'+c).once('value')).val();
+if(!r)return msg.innerText='NO ROOM';
+const ps=r.players||{};
+if(!ps[uid]&&Object.keys(ps).length>=4)return msg.innerText='ROOM FULL (4 MAX)';
+join0(c,false,r.startAt);
+};
+bStart.onclick=()=>{
+if(!rm||rm.host!==uid)return;
+const u={state:'racing',seed:Math.random()*1e9|0,startAt:now()+4000,win:null};
+for(const id in rm.players){u['players/'+id+'/d']=0;u['players/'+id+'/f']=null;u['players/'+id+'/x']=0}
+roomRef.update(u);
+};
+bLeave.onclick=()=>leave('');
+
+auth.getRedirectResult().catch(e=>err.innerText=e.code);
+auth.onAuthStateChanged(u=>{
+if(u){
+uid=u.uid;
+myName=cl((u.displayName||'GUEST'+uid.slice(0,3)).toUpperCase());
+who.innerText=myName;
+db.ref('users/'+uid).update({name:myName});
+loadGhosts();
+if(!busy&&!room)show('pMenu');
+}else{
+uid=null;
+if(room)leave('');
+show('pLogin');
+}
+});
+
+function fit(){
+const s=Math.min(1,innerWidth/width);
+game.style.transform=`scale(${s})`;
+wrap.style.width=width*s+'px';
+wrap.style.height=height*s+'px';
+}
+addEventListener('resize',fit);
+
+function init(){
+game.style.width=width+'px';
+game.style.height=height+'px';
+fit();
+
+hero.style.top=height-80+'px';
+hero.style.left=halfWidth-ASSETS.IMAGE.HERO.width/2+'px';
+hero.style.background=`url(${ASSETS.IMAGE.HERO.src})`;
+hero.style.width=`${ASSETS.IMAGE.HERO.width}px`;
+hero.style.height=`${ASSETS.IMAGE.HERO.height}px`;
+
+cloud.style.backgroundImage=`url(${ASSETS.IMAGE.SKY.src})`;
+
+audio=new Audio();
+Object.keys(ASSETS.AUDIO).forEach(key=>audio.load(ASSETS.AUDIO[key],key,_=>0));
+
+cars.push(new Car(0,ASSETS.IMAGE.CAR,LANE.C));
+cars.push(new Car(10,ASSETS.IMAGE.CAR,LANE.B));
+cars.push(new Car(20,ASSETS.IMAGE.CAR,LANE.C));
+cars.push(new Car(35,ASSETS.IMAGE.CAR,LANE.C));
+cars.push(new Car(50,ASSETS.IMAGE.CAR,LANE.A));
+cars.push(new Car(60,ASSETS.IMAGE.CAR,LANE.B));
+cars.push(new Car(70,ASSETS.IMAGE.CAR,LANE.A));
+
+for(let i=0;i<N;i++){
+var line=new Line();
+line.z=i*segL+270;
+for(let j=0;j<8;j++){
+var element=document.createElement('div');
+road.appendChild(element);
+line.elements.push(element);
+}
+lines.push(line);
+}
+
+for(let i=0;i<12;i++){
+var element=document.createElement('p');
+highscore.appendChild(element);
+}
+
+updateHighscore();
+reset();
+show('pLogin');
+
+(function loop(){
+requestAnimationFrame(loop);
+let n=timestamp();
+let delta=n-then;
+if(delta>targetFrameRate){
+then=n-(delta%targetFrameRate);
+update(delta/1000);
+}
+})();
+}
+
+init();
+</script>
+</body>
+</html>
